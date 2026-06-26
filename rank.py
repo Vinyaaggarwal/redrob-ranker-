@@ -470,14 +470,40 @@ def rank_candidates(candidates_file, output_file):
     print("Computing semantic similarity scores...")
     semantic_scores = np.dot(cand_emb_f32, jd_emb_f32)
     
-    # Immediately blacklist honeypots
+    # Immediately blacklist honeypots (score -9999 to guarantee exclusion)
     for idx, cid in enumerate(candidate_ids):
         if cid in honeypots:
             semantic_scores[idx] = -9999.0
-            
-    # Retrieve top 5000 indices for detailed scoring (expanded to handle non-tech filter)
-    print("Retrieving top 5000 candidates for multi-dimensional scoring...")
-    top_indices = np.argsort(semantic_scores)[::-1][:5000]
+    
+    # Pre-filter: build a set of non-tech candidate IDs using current_title fast scan
+    # This avoids retrieving 5000 candidates just to filter them post-hoc
+    print("Pre-filtering non-tech profiles (Tier-5 disguised candidates)...")
+    non_tech_ids = set()
+    with open(candidates_file, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            cid_match = re.search(r'"candidate_id":\s*"(CAND_\d{7})"', line)
+            if not cid_match:
+                continue
+            cid = cid_match.group(1)
+            # Fast current_title extraction (avoid full JSON parse)
+            title_match = re.search(r'"current_title":\s*"([^"]*)"', line)
+            if title_match:
+                title_lower = title_match.group(1).lower()
+                if any(nt in title_lower for nt in NON_TECH_TITLES):
+                    non_tech_ids.add(cid)
+    
+    print(f"Pre-filter identified {len(non_tech_ids)} non-tech profiles (suppressing from retrieval)")
+    
+    # Suppress non-tech profiles in semantic scores
+    for idx, cid in enumerate(candidate_ids):
+        if cid in non_tech_ids:
+            semantic_scores[idx] = -8888.0
+    
+    # Retrieve top 2000 from the remaining (tech) candidates
+    print("Retrieving top 2000 tech candidates for multi-dimensional scoring...")
+    top_indices = np.argsort(semantic_scores)[::-1][:2000]
     top_ids_set = set(candidate_ids[idx] for idx in top_indices)
     
     # Load candidate profiles from the JSONL file for top 2000
