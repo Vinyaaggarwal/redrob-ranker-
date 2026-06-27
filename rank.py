@@ -28,6 +28,8 @@ NON_TECH_TITLES = [
     "finance manager", "accountant", "chartered accountant", "ca ",
     "customer support", "customer success", "customer service",
     "teacher", "professor", "lecturer",
+    "business analyst",   # non-technical BA (5833 in dataset - keyword stuffers)
+    "qa engineer", "quality assurance", "test engineer", "software tester",  # non-AI
 ]
 
 # Tech title keywords — at least one of these must appear in career history
