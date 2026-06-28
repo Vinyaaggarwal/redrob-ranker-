@@ -1104,6 +1104,40 @@ with right_col:
             if shortlist_filter:
                 filtered_list = [x for x in filtered_list if x["id"] in st.session_state["shortlisted"]]
 
+            # 4. Export Pool to Excel (XLSX)
+            import io
+            import pandas as pd
+            
+            export_rows = []
+            for idx, item in enumerate(filtered_list):
+                cand = item["cand"]
+                prof = cand.get("profile", {})
+                export_rows.append({
+                    "candidate_id": item["id"],
+                    "rank": idx + 1,
+                    "score": item["final_score"],
+                    "reasoning": item.get("reasoning", "") or f"Matched profile parameters."
+                })
+            
+            export_df = pd.DataFrame(export_rows)
+            if not export_df.empty:
+                export_df = export_df[["candidate_id", "rank", "score", "reasoning"]]
+            
+            buffer = io.BytesIO()
+            try:
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    export_df.to_excel(writer, index=False)
+                excel_data = buffer.getvalue()
+                st.download_button(
+                    label="📥 Export Pool to Excel (XLSX)",
+                    data=excel_data,
+                    file_name="ranked_candidates.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_xlsx_btn"
+                )
+            except Exception as e:
+                st.error(f"Failed to generate Excel download: {e}")
+
 
             # 5. Side-by-side Candidate Comparison Drawer
             if len(st.session_state["comparison_pool"]) >= 1:

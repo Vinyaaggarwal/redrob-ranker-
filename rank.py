@@ -791,8 +791,28 @@ def rank_candidates(candidates_file, output_file):
                 item["score"],
                 item["reasoning"]
             ])
+
+    # Save the output XLSX automatically if pandas is available
+    try:
+        import pandas as pd
+        xlsx_file = output_file.rsplit(".", 1)[0] + ".xlsx"
+        print(f"Writing rankings to {xlsx_file}...")
+        df = pd.DataFrame([
+            {
+                "candidate_id": item["candidate_id"],
+                "rank": i + 1,
+                "score": item["score"],
+                "reasoning": item["reasoning"]
+            }
+            for i, item in enumerate(top_100)
+        ])
+        df.to_excel(xlsx_file, index=False)
+    except Exception as e:
+        print(f"Could not write Excel file: {e}")
             
     print("Ranking successfully completed!")
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Rank candidates against the Senior AI Engineer Job Description.")
