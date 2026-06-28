@@ -8,14 +8,80 @@ import numpy as np
 from datetime import datetime
 from sentence_transformers import SentenceTransformer
 
-# Constants
+# ==============================================================================
+# DYNAMIC JD REQUIREMENTS LOADER (Scenario B)
+# Loads skill mappings and experience targets from parsed_jd.json.
+# This file is generated offline by parse_jd.py from the raw job_description.txt.
+# If parsed_jd.json is missing, the system falls back to safe defaults so that
+# ranking can still run even without pre-parsing.
+# ==============================================================================
+
+def _load_jd_requirements(parsed_jd_path="parsed_jd.json"):
+    """Load structured JD requirements from the offline-parsed JSON file."""
+    if os.path.exists(parsed_jd_path):
+        with open(parsed_jd_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        print(f"[rank.py] Loaded JD requirements from {parsed_jd_path}")
+        print(f"          Domain: {data.get('domain')} | "
+              f"Exp: {data.get('experience_min')}-{data.get('experience_max')} yrs | "
+              f"Required skills: {len(data.get('core_skills_mapping', {}))}")
+        return data
+    else:
+        print("[rank.py] WARNING: parsed_jd.json not found. "
+              "Run 'python parse_jd.py' first for dynamic JD parsing. "
+              "Using built-in fallback defaults.")
+        return None
+
+# Load JD requirements once at module startup
+_JD_REQ = _load_jd_requirements()
+
+# Resolve CORE_SKILLS_MAPPING: use parsed_jd.json if available, else hardcoded fallback
+if _JD_REQ and _JD_REQ.get("core_skills_mapping"):
+    CORE_SKILLS_MAPPING = _JD_REQ["core_skills_mapping"]
+else:
+    # Hardcoded fallback (used only when parsed_jd.json is missing)
+    CORE_SKILLS_MAPPING = {
+        "embeddings": ["embeddings", "dense retrieval", "rag", "search engine", "retrieval",
+                       "semantic search", "information retrieval", "search system", "indexing", "vector search"],
+        "vector_databases": ["vector db", "vector database", "faiss", "pinecone", "milvus",
+                             "qdrant", "weaviate", "chroma", "elasticsearch", "opensearch"],
+        "hybrid_search": ["hybrid search", "bm25", "sparse search", "keyword search", "lexical search"],
+        "python": ["python", "py", "django", "flask", "fastapi"],
+        "evaluation_frameworks": ["ndcg", "mrr", "map", "evaluation", "ranking evaluation",
+                                   "recall", "precision", "benchmark", "evaluation framework"]
+    }
+
+# Resolve PREFERRED_SKILLS_MAPPING
+if _JD_REQ and _JD_REQ.get("preferred_skills_mapping"):
+    PREFERRED_SKILLS_MAPPING = _JD_REQ["preferred_skills_mapping"]
+else:
+    PREFERRED_SKILLS_MAPPING = {
+        "llm_finetuning": ["fine-tuning", "lora", "qlora", "peft", "sft", "rlhf",
+                           "pre-training", "transformers", "huggingface", "llama", "mistral", "deepspeed", "fsdp"],
+        "learning_to_rank": ["learning to rank", "ltr", "xgboost", "lightgbm", "catboost", "neural ranking"],
+        "distributed_systems": ["distributed", "spark", "ray", "kubernetes", "docker", "scale", "clustering"],
+        "hr_tech": ["hr-tech", "recruiting tech", "recruitment", "marketplace", "talent acquisition"],
+        "open_source": ["open-source", "open source", "github", "contributions", "pull requests"]
+    }
+
+# Resolve experience range
+if _JD_REQ:
+    EXP_MIN = int(_JD_REQ.get("experience_min", 5))
+    EXP_MAX = int(_JD_REQ.get("experience_max", 9))
+else:
+    EXP_MIN, EXP_MAX = 5, 9
+
+# ==============================================================================
+# STATIC CONSTANTS (these remain fixed — they filter bad-faith candidates
+# regardless of what the JD says, so they do NOT need to be dynamic)
+# ==============================================================================
+
 SERVICE_FIRMS = [
-    "tcs", "tata consultancy", "infosys", "wipro", "accenture", 
-    "cognizant", "capgemini", "tech mahindra", "hcl", "l&t", "lnt", 
+    "tcs", "tata consultancy", "infosys", "wipro", "accenture",
+    "cognizant", "capgemini", "tech mahindra", "hcl", "l&t", "lnt",
     "mindtree", "mphasis"
 ]
 
-# Titles that are clearly non-tech / non-AI roles (Tier 5 disguised candidates)
 NON_TECH_TITLES = [
     "civil engineer", "mechanical engineer", "electrical engineer", "structural engineer",
     "chemical engineer", "aerospace engineer", "automobile engineer", "industrial engineer",
@@ -24,15 +90,14 @@ NON_TECH_TITLES = [
     "sales executive", "sales manager", "account manager", "business development",
     "operations manager", "operations executive", "supply chain", "logistics",
     "marketing manager", "marketing executive", "brand manager", "content writer",
-    "project manager", "program manager",  # non-technical PM roles
+    "project manager", "program manager",
     "finance manager", "accountant", "chartered accountant", "ca ",
     "customer support", "customer success", "customer service",
     "teacher", "professor", "lecturer",
-    "business analyst",   # non-technical BA (5833 in dataset - keyword stuffers)
-    "qa engineer", "quality assurance", "test engineer", "software tester",  # non-AI
+    "business analyst",
+    "qa engineer", "quality assurance", "test engineer", "software tester",
 ]
 
-# Tech title keywords — at least one of these must appear in career history
 TECH_TITLE_KEYWORDS = [
     "engineer", "developer", "programmer", "scientist", "analyst",
     "architect", "researcher", "ml ", "ai ", "nlp", "data ",
@@ -40,21 +105,49 @@ TECH_TITLE_KEYWORDS = [
     "platform", "infrastructure", "cloud", "security", "systems",
 ]
 
-CORE_SKILLS_MAPPING = {
-    "embeddings-based retrieval": ["embeddings", "dense retrieval", "rag", "search engine", "retrieval", "semantic search", "information retrieval", "search system", "indexing", "vector search"],
-    "vector databases": ["vector db", "vector database", "faiss", "pinecone", "milvus", "qdrant", "weaviate", "chroma", "elasticsearch", "opensearch"],
-    "hybrid search": ["hybrid search", "bm25", "sparse search", "keyword search", "lexical search"],
-    "python": ["python", "py", "django", "flask", "fastapi"],
-    "evaluation frameworks": ["ndcg", "mrr", "map", "evaluation", "ranking evaluation", "recall", "precision", "benchmark", "evaluation framework"]
+# ==============================================================================
+# DOMAIN SIMILARITY — dynamic title keywords derived from parsed_jd.json domain
+# Maps the JD's detected domain to the job title keywords that represent it.
+# ==============================================================================
+
+_DOMAIN_TITLE_MAP = {
+    "AI/ML":            ["ml engineer", "machine learning", "ai engineer", "data scientist",
+                         "nlp engineer", "research scientist", "applied scientist",
+                         "search engineer", "recommendation", "deep learning",
+                         "computer vision", "llm engineer", "ml researcher"],
+    "Data Engineering": ["data engineer", "data pipeline", "etl", "data platform",
+                         "analytics engineer", "data infrastructure"],
+    "DevOps":           ["devops", "sre", "site reliability", "platform engineer",
+                         "infrastructure engineer", "cloud engineer"],
+    "Mobile":           ["android engineer", "ios engineer", "mobile engineer",
+                         "flutter developer", "react native"],
+    "Frontend":         ["frontend engineer", "ui engineer", "web developer",
+                         "react developer", "javascript developer"],
+    "Backend":          ["backend engineer", "software engineer", "api engineer",
+                         "server side", "platform engineer", "systems engineer"],
+    "General":          ["software engineer", "developer", "engineer"],
 }
 
-PREFERRED_SKILLS_MAPPING = {
-    "llm fine-tuning": ["fine-tuning", "lora", "qlora", "peft", "sft", "rlhf", "pre-training", "transformers", "huggingface", "llama", "mistral", "deepspeed", "fsdp"],
-    "learning-to-rank": ["learning to rank", "ltr", "xgboost", "lightgbm", "catboost", "neural ranking"],
-    "distributed systems": ["distributed", "spark", "ray", "kubernetes", "docker", "scale", "clustering"],
-    "hr-tech": ["hr-tech", "recruiting tech", "recruitment", "marketplace", "talent acquisition"],
-    "open-source": ["open-source", "open source", "github", "contributions", "pull requests"]
-}
+# Resolve domain title keywords from parsed_jd.json
+_JD_DOMAIN = _JD_REQ.get("domain", "General") if _JD_REQ else "General"
+DOMAIN_TITLE_KEYWORDS = _DOMAIN_TITLE_MAP.get(_JD_DOMAIN, _DOMAIN_TITLE_MAP["General"])
+
+# Build dynamic project relevance keywords from core skill synonyms in parsed_jd.json
+# These are all synonyms of required skills — if a candidate worked on any of these,
+# their projects are considered relevant.
+if _JD_REQ and _JD_REQ.get("core_skills_mapping"):
+    PROJECT_RELEVANCE_KEYWORDS = list({
+        syn
+        for synonyms in _JD_REQ["core_skills_mapping"].values()
+        for syn in synonyms
+        if len(syn) > 4  # skip very short synonyms that can false-match
+    })
+else:
+    # Fallback for when parsed_jd.json is missing
+    PROJECT_RELEVANCE_KEYWORDS = [
+        "ranking", "retrieval", "vector search", "recommendation system",
+        "search engine", "rag", "information retrieval", "hybrid search"
+    ]
 
 def is_service_firm(company_name):
     name = company_name.lower()
@@ -190,15 +283,16 @@ def evaluate_experience(cand):
     if is_non_tech_profile(cand):
         return 0.02  # Near-zero: effectively removes them from top 100
     
-    # 1. Seniority Years fit
+    # 1. Seniority Years fit — dynamically uses EXP_MIN / EXP_MAX from parsed_jd.json
     profile_years = profile.get("years_of_experience", 0)
-    if 5 <= profile_years <= 9:
+    exp_range = EXP_MAX - EXP_MIN  # e.g. 4 for a 5-9 range
+    if EXP_MIN <= profile_years <= EXP_MAX:
         seniority_fit = 1.0
-    elif profile_years == 4 or profile_years == 10:
+    elif profile_years == EXP_MIN - 1 or profile_years == EXP_MAX + 1:
         seniority_fit = 0.8
-    elif profile_years == 3 or profile_years == 11:
+    elif profile_years == EXP_MIN - 2 or profile_years == EXP_MAX + 2:
         seniority_fit = 0.6
-    elif profile_years == 2 or profile_years == 12:
+    elif profile_years == EXP_MIN - 3 or profile_years == EXP_MAX + 3:
         seniority_fit = 0.4
     else:
         seniority_fit = 0.1
@@ -278,27 +372,68 @@ def evaluate_experience(cand):
     exp_score = (0.5 * seniority_fit + 0.5 * ai_score) * research_penalty * coding_penalty
     return float(exp_score)
 
+def evaluate_domain_similarity(cand):
+    """Score how well the candidate's career domain aligns with the JD domain.
+
+    Uses DOMAIN_TITLE_KEYWORDS (resolved dynamically from parsed_jd.json) to
+    measure what fraction of the candidate's career was spent in the target domain.
+    Returns a float in [0.0, 1.0].
+    """
+    history = cand.get("career_history", [])
+    profile  = cand.get("profile", {})
+    if not history:
+        return 0.3  # neutral — no history to judge
+
+    domain_months = 0
+    total_months  = 0
+
+    for job in history:
+        title = job.get("title", "").lower()
+        desc  = job.get("description", "").lower()
+        dur   = job.get("duration_months", 0)
+        total_months += dur
+
+        # Count as domain-relevant if the title OR description signals domain match
+        title_match = any(kw in title for kw in DOMAIN_TITLE_KEYWORDS)
+        desc_match  = sum(1 for kw in DOMAIN_TITLE_KEYWORDS if kw in desc) >= 2
+        if title_match or desc_match:
+            domain_months += dur
+
+    if total_months == 0:
+        return 0.3
+
+    domain_ratio = domain_months / total_months
+
+    # Also boost if current title is in domain
+    current_title = profile.get("current_title", "").lower()
+    current_domain_match = any(kw in current_title for kw in DOMAIN_TITLE_KEYWORDS)
+    current_boost = 0.1 if current_domain_match else 0.0
+
+    return float(min(1.0, domain_ratio + current_boost))
+
+
 def evaluate_project_relevance(cand):
+    """Score how many months a candidate spent working on projects that directly
+    match the JD's required skill areas.
+
+    Uses PROJECT_RELEVANCE_KEYWORDS (resolved dynamically from parsed_jd.json
+    core_skills_mapping synonyms) so this function needs zero code changes when
+    the JD changes — just re-run parse_jd.py.
+    """
     history = cand.get("career_history", [])
     if not history:
         return 0.0
-        
-    project_keywords = [
-        "ranking", "retrieval", "vector search", "recommendation system", 
-        "search engine", "rag", "information retrieval", "hybrid search"
-    ]
-    
+
     relevant_months = 0
     for job in history:
-        desc = job.get("description", "").lower()
-        title = job.get("title", "").lower()
-        dur = job.get("duration_months", 0)
-        
-        if any(kw in desc or kw in title for kw in project_keywords):
+        desc  = job.get("description", "").lower()
+        title = job.get("title",       "").lower()
+        dur   = job.get("duration_months", 0)
+        if any(kw in desc or kw in title for kw in PROJECT_RELEVANCE_KEYWORDS):
             relevant_months += dur
-            
-    score = relevant_months / 48.0 # target 4 years
-    return min(1.0, float(score))
+
+    # Target: 4 years (48 months) of project-level domain relevance = perfect score
+    return min(1.0, float(relevant_months / 48.0))
 
 def evaluate_velocity_and_stability(cand):
     history = cand.get("career_history", [])
@@ -408,39 +543,83 @@ def evaluate_behavior(cand):
     return float(beh_score)
 
 def make_justification(cand, scores):
-    profile = cand.get("profile", {})
-    name = profile.get("anonymized_name", "Candidate")
+    """Generate a specific, honest 1-2 sentence reasoning for a candidate's rank.
+
+    Uses scores dict + parsed_jd.json domain/location to produce reasoning that:
+    - References concrete facts from the profile (years, title, skills)
+    - Connects to JD requirements (domain fit, notice period, location)
+    - Honestly flags concerns where present (low skill score, long notice)
+    """
+    profile  = cand.get("profile", {})
+    signals  = cand.get("redrob_signals", {})
+    skills   = cand.get("skills", [])
+    history  = cand.get("career_history", [])
+
+    name  = profile.get("anonymized_name", "Candidate")
     title = profile.get("current_title", "Software Engineer")
     years = profile.get("years_of_experience", 0)
-    skills = cand.get("skills", [])
-    
-    # Find top technical matching skill
-    ai_skills = ["nlp", "fine-tuning llms", "vector databases", "pytorch", "tensorflow", "fastapi", "embeddings", "milvus", "qdrant", "faiss"]
-    matching_skills = [s.get("name") for s in skills if s.get("name", "").lower() in ai_skills]
-    top_skill_str = f"with expertise in {matching_skills[0]}" if matching_skills else "with strong technical foundations"
-    
-    history = cand.get("career_history", [])
-    has_product = False
-    for job in history:
-        comp = job.get("company", "").lower()
-        if comp and not is_service_firm(comp):
-            has_product = True
-            break
-            
-    exp_context = "at product-focused companies" if has_product else "in professional environments"
-    
-    # Check notice period and location
-    signals = cand.get("redrob_signals", {})
-    notice = signals.get("notice_period_days", 30)
-    loc = profile.get("location", "")
-    
-    # Build reasoning
-    reasoning = (
-        f"{name} is a {title} with {years:.1f} years of experience {exp_context}, {top_skill_str}. "
-        f"They demonstrate high platform engagement (response rate: {signals.get('recruiter_response_rate', 0.0)*100:.0f}%) "
-        f"and have a {notice}-day notice period, fitting the Noida/Pune hybrid target."
+
+    # --- Strength: find best matching skill from core required skills ---
+    all_required_synonyms = {
+        syn
+        for synonyms in CORE_SKILLS_MAPPING.values()
+        for syn in synonyms
+    }
+    matched_skills = [
+        s.get("name") for s in skills
+        if any(syn in s.get("name", "").lower() for syn in all_required_synonyms)
+    ]
+    if matched_skills:
+        skill_str = f"strong match on {matched_skills[0]}"
+    else:
+        skill_str = "general technical background"
+
+    # --- Company type context ---
+    has_product = any(
+        job.get("company") and not is_service_firm(job.get("company", ""))
+        for job in history
     )
-    return reasoning
+    company_ctx = "product company experience" if has_product else "service firm background (penalty applied)"
+
+    # --- Experience fit vs JD range ---
+    exp_fit_note = ""
+    if years < EXP_MIN:
+        exp_fit_note = f" ({years:.0f} yrs — below JD target of {EXP_MIN}-{EXP_MAX})"
+    elif years > EXP_MAX + 2:
+        exp_fit_note = f" ({years:.0f} yrs — may be overqualified for {EXP_MIN}-{EXP_MAX} target)"
+    else:
+        exp_fit_note = f" ({years:.0f} yrs — within {EXP_MIN}-{EXP_MAX} target)"
+
+    # --- Domain fit note ---
+    domain_score = scores.get("domain", 0.5)
+    domain_note = ""
+    if domain_score >= 0.7:
+        domain_note = f", strong {_JD_DOMAIN} domain alignment"
+    elif domain_score < 0.4:
+        domain_note = f", limited {_JD_DOMAIN} domain history"
+
+    # --- Availability / notice period concern ---
+    notice       = signals.get("notice_period_days", 30)
+    notice_note  = ""
+    preferred_notice = _JD_REQ.get("notice_period_days", 30) if _JD_REQ else 30
+    if notice > preferred_notice * 2:
+        notice_note = f" Notice period concern: {notice} days."
+    elif notice <= preferred_notice:
+        notice_note = f" Immediate availability (≤{notice}-day notice)."
+
+    # --- Compose final reasoning ---
+    sentence1 = (
+        f"{name} is a {title} with {years:.0f} years{exp_fit_note}, "
+        f"{company_ctx}, and {skill_str}{domain_note}."
+    )
+    sentence2 = (
+        f"Semantic match: {scores.get('semantic', 0)*100:.0f}%; "
+        f"skills: {scores.get('skills', 0)*100:.0f}%; "
+        f"experience: {scores.get('experience', 0)*100:.0f}%; "
+        f"projects: {scores.get('projects', 0)*100:.0f}%."
+        + notice_note
+    )
+    return f"{sentence1} {sentence2}"
 
 def rank_candidates(candidates_file, output_file):
     print("Loading precomputed candidate embeddings and IDs...")
@@ -527,55 +706,65 @@ def rank_candidates(candidates_file, output_file):
     # Compute hybrid scores for these top 2000 candidates
     scored_candidates = []
     
-    print("Scoring candidates on Skills, Experience, Projects, Velocity, and Behavior...")
+    print("Scoring candidates on Skills, Experience, Domain, Projects, Velocity, and Behavior...")
     for idx in top_indices:
         cid = candidate_ids[idx]
         cand = candidate_profiles.get(cid)
         if not cand:
             continue
-            
+
         semantic_val = max(0.0, float(semantic_scores[idx]))
-        
-        # Call metric scoring functions
-        skills_score = evaluate_skills(cand)
-        exp_score = evaluate_experience(cand)
-        proj_score = evaluate_project_relevance(cand)
-        vel_score = evaluate_velocity_and_stability(cand)
-        beh_score = evaluate_behavior(cand)
-        
-        # HARD DISQUALIFIER: Non-tech profiles are immediately suppressed to near-zero
-        # regardless of their semantic similarity (they keyword-stuff AI terms to fool embeddings)
+
+        # --- Multi-dimensional feature scoring ---
+        skills_score  = evaluate_skills(cand)
+        exp_score     = evaluate_experience(cand)
+        domain_score  = evaluate_domain_similarity(cand)   # NEW: domain fit
+        proj_score    = evaluate_project_relevance(cand)   # now uses dynamic keywords
+        vel_score     = evaluate_velocity_and_stability(cand)
+        beh_score     = evaluate_behavior(cand)
+
+        # HARD DISQUALIFIER: Non-tech profiles near-zeroed regardless of semantic score
         if is_non_tech_profile(cand):
             final_score = 0.001
         else:
-            # Calculate final composite score
+            # Weighted Hybrid Scorer
+            # Weights must sum to 1.0:
+            #   Semantic Similarity   30% — captures overall JD-profile alignment
+            #   Skill Evidence        20% — validated skills with proficiency + duration
+            #   Experience Evidence   20% — years fit + applied domain AI years
+            #   Domain Similarity      5% — career spent in JD's target domain
+            #   Project Relevance     10% — months in JD-relevant project work
+            #   Career Velocity       10% — stability + progression
+            #   Behavioral Signals     5% — availability, engagement, recency
             final_score = (
-                0.30 * semantic_val +
-                0.20 * skills_score +
-                0.25 * exp_score +
-                0.10 * proj_score +
-                0.10 * vel_score +
+                0.30 * semantic_val  +
+                0.20 * skills_score  +
+                0.20 * exp_score     +
+                0.05 * domain_score  +
+                0.10 * proj_score    +
+                0.10 * vel_score     +
                 0.05 * beh_score
             )
-            
-        # Clamp to 0.0 - 1.0 range
+
+        # Clamp to [0.0, 1.0]
         final_score = float(max(0.0, min(1.0, final_score)))
-        
+
         scores = {
-            "semantic": semantic_val,
-            "skills": skills_score,
+            "semantic":   semantic_val,
+            "skills":     skills_score,
             "experience": exp_score,
-            "projects": proj_score,
-            "velocity": vel_score,
-            "behavior": beh_score
+            "domain":     domain_score,
+            "projects":   proj_score,
+            "velocity":   vel_score,
+            "behavior":   beh_score,
         }
-        
+
         reasoning = make_justification(cand, scores)
-        
+
         scored_candidates.append({
             "candidate_id": cid,
-            "score": final_score,
-            "reasoning": reasoning
+            "score":        final_score,
+            "reasoning":    reasoning
         })
         
     # Round the scores to 4 decimal places before sorting to avoid tie-breaker mismatches due to rounding

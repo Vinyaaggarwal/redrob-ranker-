@@ -1,0 +1,78 @@
+# Redrob Hackathon — Submission Metadata
+#
+# Copied to repo root as `submission_metadata.yaml` and populated.
+# Stage 3 review uses this file to verify portal metadata.
+
+# ============================================================================
+# Team identity
+# ============================================================================
+team_name: "vinyas-ai-foundry"  # Used in leaderboard and announcements
+
+primary_contact:
+  name: "Vinyas"
+  email: "vinyas@example.com"    # Used for all organizer communication
+  phone: "+91-9999999999"        # Used for top-50 / top-10 outreach
+
+team_members:
+  - name: "Vinyas"
+    email: "vinyas@example.com"
+    role: "ML Engineer"          # Optional, e.g. "Team Lead", "Backend", "Data"
+
+# ============================================================================
+# Code and reproducibility
+# ============================================================================
+github_repo: "https://github.com/vinyas/redrob-ranker"
+# Required. Must be reachable. Private repos OK if you can grant organizer
+# access at Stage 3.
+
+sandbox_link: "https://huggingface.co/spaces/vinyas/redrob-ranker"
+# Required. A working hosted environment where the ranker can be run on a small candidate sample.
+
+reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./submission.csv"
+# The single command that produces submission.csv from candidates.jsonl.
+# Runs end-to-end within 5 minutes on CPU with 16GB RAM and no network.
+
+# ============================================================================
+# Compute environment
+# ============================================================================
+compute:
+  platform: "Local Intel/AMD PC"                # MacBook Pro M2, etc.
+  cpu_cores: 8                                  # Number of CPU cores used
+  ram_gb: 16                                    # Available RAM in GB
+  python_version: "3.13.0"                      # python --version
+  os: "Windows 11"                              # Or "Ubuntu 22.04 LTS", etc.
+  uses_gpu_for_inference: false                 # Must be false
+  has_network_during_ranking: false             # Must be false
+  pre_computation_required: true                # true since we pre-compute embeddings
+  pre_computation_time_minutes: 12              # Time taken to generate candidate_embeddings.npz
+
+# ============================================================================
+# AI tools declaration
+# ============================================================================
+ai_tools_used:
+  - "Claude"
+  - "Gemini"
+  - "Other"
+
+ai_usage_summary: |
+  Used Gemini for coding assistance and code review. Used Claude for brainstorming and architectural trade-off discussions. No candidate data was fed to any external LLMs during the ranking step; all ranking and scoring functions run locally on CPU.
+
+# ============================================================================
+# Approach summary
+# ============================================================================
+methodology_summary: |
+  A two-stage hybrid ranking system designed for high precision and low latency.
+  First, it immediately filters 76 honeypot candidates using deterministic anomaly checks (skill-duration, release dates, duration overlaps).
+  Second, it retrieves the Top 2000 candidates via fast cosine similarity against precomputed candidate embeddings (SentenceTransformers all-MiniLM-L6-v2) stored in float16.
+  Finally, a fine-grained, multi-dimensional scoring engine ranks the Top 2000 based on core skills fit (penalizing keyword stuffers), experience seniority (5-9 yrs), hands-on project relevance, stability (tenure), and platform behavioral engagement. Equal scores are broken by candidate ID ascending.
+  Executes in under 3 seconds on CPU.
+
+# ============================================================================
+# Declarations
+# ============================================================================
+declarations:
+  read_submission_spec: true        # I have read submission_spec.md in full
+  code_is_original_work: true       # My code is my team's original work
+  no_collusion: true                # I have not coordinated my submission with other teams
+  honeypot_check_done: true         # Checked and blacklisted 76 honeypots
+  reproduction_tested: true         # Tested that reproduce_command runs end-to-end
