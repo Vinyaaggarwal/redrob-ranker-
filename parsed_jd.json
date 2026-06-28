@@ -1,0 +1,206 @@
+{
+  "experience_min": 5,
+  "experience_max": 9,
+  "domain": "AI/ML",
+  "location": "Pune/Noida, India",
+  "notice_period_days": 30,
+  "required_skill_categories": [
+    "aws",
+    "embeddings",
+    "evaluation_frameworks",
+    "hr_tech",
+    "hybrid_search",
+    "llm_finetuning",
+    "llm_frameworks",
+    "python",
+    "rag",
+    "vector_databases"
+  ],
+  "preferred_skill_categories": [
+    "distributed_systems",
+    "ml_frameworks",
+    "open_source"
+  ],
+  "disqualifier_skill_categories": [
+    "aws",
+    "computer_vision",
+    "llm_frameworks",
+    "nlp",
+    "open_source"
+  ],
+  "core_skills_mapping": {
+    "aws": [
+      "aws",
+      "amazon web services",
+      "ec2",
+      "s3",
+      "sagemaker",
+      "lambda",
+      "eks",
+      "ecs",
+      "rds",
+      "cloudformation"
+    ],
+    "embeddings": [
+      "embeddings",
+      "embedding",
+      "dense retrieval",
+      "sentence-transformers",
+      "sentence transformers",
+      "bge",
+      "e5",
+      "openai embeddings",
+      "text embeddings"
+    ],
+    "evaluation_frameworks": [
+      "ndcg",
+      "mrr",
+      "recall@",
+      "precision@",
+      "f1",
+      "a/b test",
+      "a/b testing",
+      "ab testing",
+      "offline evaluation",
+      "online evaluation",
+      "evaluation framework",
+      "benchmark"
+    ],
+    "hr_tech": [
+      "hr-tech",
+      "hr tech",
+      "recruiting tech",
+      "recruitment",
+      "talent acquisition",
+      "marketplace",
+      "talent intelligence",
+      "applicant tracking",
+      "ats"
+    ],
+    "hybrid_search": [
+      "hybrid search",
+      "bm25",
+      "sparse search",
+      "keyword search",
+      "lexical search",
+      "dense sparse",
+      "hybrid retrieval"
+    ],
+    "llm_finetuning": [
+      "fine-tuning",
+      "fine tuning",
+      "finetuning",
+      "lora",
+      "qlora",
+      "peft",
+      "sft",
+      "rlhf",
+      "pre-training",
+      "pretraining",
+      "instruction tuning",
+      "deepspeed",
+      "fsdp",
+      "transformers"
+    ],
+    "llm_frameworks": [
+      "llm",
+      "large language model",
+      "gpt",
+      "chatgpt",
+      "claude",
+      "gemini",
+      "llama",
+      "mistral",
+      "falcon",
+      "huggingface",
+      "hugging face",
+      "openai",
+      "anthropic",
+      "langchain",
+      "llamaindex"
+    ],
+    "python": [
+      "python",
+      "django",
+      "flask",
+      "fastapi",
+      "pydantic"
+    ],
+    "rag": [
+      "rag",
+      "retrieval augmented generation",
+      "retrieval-augmented",
+      "information retrieval",
+      "ir system",
+      "search engine"
+    ],
+    "vector_databases": [
+      "vector database",
+      "vector db",
+      "faiss",
+      "pinecone",
+      "milvus",
+      "qdrant",
+      "weaviate",
+      "chroma",
+      "chromadb",
+      "opensearch",
+      "elasticsearch",
+      "vespa"
+    ]
+  },
+  "preferred_skills_mapping": {
+    "distributed_systems": [
+      "distributed",
+      "apache spark",
+      "ray",
+      "dask",
+      "flink",
+      "kafka",
+      "messaging queue",
+      "pub/sub",
+      "event-driven"
+    ],
+    "ml_frameworks": [
+      "pytorch",
+      "tensorflow",
+      "keras",
+      "jax",
+      "sklearn",
+      "scikit-learn",
+      "xgboost",
+      "lightgbm",
+      "catboost"
+    ],
+    "open_source": [
+      "open-source",
+      "open source",
+      "github contributions",
+      "pull requests",
+      "open source contributions"
+    ]
+  },
+  "debug_sections": {
+    "required_sentences": [
+      "Job Description: Senior AI Engineer \u2014 Founding Team\nCompany: Redrob AI (Series A AI-native talent intelligence platform)\nLocation: Pune/Noida, India (Hybrid \u2014 flexible cadence) | Open to relocation candidates from Tier-1 Indian cities\nEmployment Type: Full-time\nExperience Required: 5\u20139 years (see \"what we mean by this\" below)\nLet's be honest about this role\nWe're going to write this JD differently from most.",
+      "We're a Series A company that just raised our round and we're building a new AI Engineering org from scratch.",
+      "This is the kind of role where the JD changes every six months because the company changes every six months.",
+      "So instead of pretending we have a fixed checklist, we're going to tell you what we actually need and what we've gotten wrong before.",
+      "If you've spent your career at Google or Meta and you want a well-scoped role with a defined ladder, this isn't it."
+    ],
+    "preferred_sentences": [
+      "Things we'd like you to have but won't reject you for\nLLM fine-tuning experience (LoRA, QLoRA, PEFT)\nExperience with learning-to-rank models (XGBoost-based or neural)\nPrior exposure to HR-tech, recruiting tech, or marketplace products\nBackground in distributed systems or large-scale inference optimization\nOpen-source contributions in the AI/ML space\nThings we explicitly do NOT want\nThis is the section most JDs skip but we think it's the most important:\nTitle-chasers.",
+      "On location, comp, and logistics\nLocation: Pune/Noida-preferred but flexible.",
+      "We have offices in Noida and Pune(mostly used Tue/Thu).",
+      "We don't require any specific number of in-office days but we expect quarterly travel for offsites.",
+      "Candidates in Hyderabad, Pune, Mumbai, Delhi NCR welcome to apply."
+    ],
+    "disqualifier_sentences": [
+      "That said, here are the disqualifiers we actually apply:\nIf you've spent your career in pure research environments (academic labs, research-only roles) without any production deployment \u2014 we will not move forward.",
+      "We are explicit about this.",
+      "We've tried it twice and it didn't work for either side.",
+      "If your \"AI experience\" consists primarily of recent (under 12 months) projects using LangChain to call OpenAI \u2014 we will probably not move forward, unless you can demonstrate substantial pre-LLM-era ML production experience.",
+      "We're looking for people who understood retrieval and ranking before it became fashionable."
+    ]
+  }
+}
